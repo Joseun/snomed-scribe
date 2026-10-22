@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from sqlalchemy.orm import Session
 
-from app import models
+from app import models, oncall
 from app.config import ALERT_WEBHOOK_URL, REJECTION_RATE_ALERT_THRESHOLD
 
 DEFAULT_WINDOW_MINUTES = 60
@@ -55,6 +55,7 @@ def check_and_fire_alert(db: Session) -> bool:
     )
     db.commit()
     _send_alert_webhook({"alert": "coding-quality-degraded", **metrics})
+    oncall.diagnose_and_act(db)
     return True
 
 
