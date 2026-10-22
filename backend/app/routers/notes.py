@@ -4,12 +4,14 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.db import get_db
 from app.extraction import AnthropicExtractionClient, ExtractionClient, extract_candidates
+from app.extraction_config import get_or_create_extraction_config
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
-def get_extraction_client() -> ExtractionClient:
-    return AnthropicExtractionClient()
+def get_extraction_client(db: Session = Depends(get_db)) -> ExtractionClient:
+    config = get_or_create_extraction_config(db)
+    return AnthropicExtractionClient(model=config.active_model)
 
 
 @router.post("", response_model=schemas.NoteOut)

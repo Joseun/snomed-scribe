@@ -52,3 +52,18 @@ class AuditEvent(Base):
     event_type = Column(String, nullable=False)
     payload = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=_now)
+
+
+class ExtractionConfig(Base):
+    """Singleton row (id='default') tracking which model version is live.
+
+    Lets the on-call agent roll back to the last known-good model without a
+    redeploy — see app/oncall.py.
+    """
+
+    __tablename__ = "extraction_config"
+
+    id = Column(String, primary_key=True)
+    active_model = Column(String, nullable=False)
+    known_good_model = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=_now, onupdate=_now)

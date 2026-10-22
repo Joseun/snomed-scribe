@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from app.config import ANTHROPIC_API_KEY, SNOMED_SUBSET_PATH
+from app.config import ANTHROPIC_API_KEY, KNOWN_GOOD_EXTRACTION_MODEL, SNOMED_SUBSET_PATH
 
 NEGATION_CUES = ("no ", "not ", "denies ", "denied ", "without ", "no evidence of ")
 CLAUSE_BOUNDARY = re.compile(r"[.,;]|\bbut\b|\bhowever\b|\balthough\b")
@@ -73,7 +73,7 @@ class ExtractionClient(Protocol):
 class AnthropicExtractionClient:
     """Calls Claude, constrained to the curated SNOMED subset via the prompt."""
 
-    def __init__(self, model: str = "claude-sonnet-5-5", api_key: str | None = None):
+    def __init__(self, model: str = KNOWN_GOOD_EXTRACTION_MODEL, api_key: str | None = None):
         self.model = model
         self.api_key = api_key or ANTHROPIC_API_KEY
 
