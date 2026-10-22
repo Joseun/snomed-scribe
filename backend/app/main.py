@@ -2,10 +2,12 @@ from fastapi import FastAPI
 
 from app.db import Base, engine
 from app.routers import metrics, notes, suggestions
+from app.telemetry import setup_telemetry
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="ClinCode")
+setup_telemetry(app)
 
 app.include_router(notes.router)
 app.include_router(suggestions.router)
