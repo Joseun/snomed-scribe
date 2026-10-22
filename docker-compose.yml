@@ -15,6 +15,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://clincode:clincode@db:5432/clincode
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
     ports:
       - "8000:8000"
     depends_on:

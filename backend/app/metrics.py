@@ -1,11 +1,16 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app import models
-from app.config import REJECTION_RATE_ALERT_THRESHOLD
+from app.config import ALERT_WEBHOOK_URL, REJECTION_RATE_ALERT_THRESHOLD
 
 DEFAULT_WINDOW_MINUTES = 60
+WEBHOOK_TIMEOUT_SECONDS = 5
+
+logger = logging.getLogger(__name__)
 
 
 def compute_coding_metrics(db: Session, window_minutes: int = DEFAULT_WINDOW_MINUTES) -> dict:
@@ -49,4 +54,15 @@ def check_and_fire_alert(db: Session) -> bool:
         )
     )
     db.commit()
+    _send_alert_webhook({"alert": "coding-quality-degraded", **metrics})
     return True
+
+
+def _send_alert_webhook(payload: dict) -> None:
+    """Best-effort delivery; a down webhook must never fail the request."""
+    if not ALERT_WEBHOOK_URL:
+        return
+    try:
+        httpx.post(ALERT_WEBHOOK_URL, json=payload, timeout=WEBHOOK_TIMEOUT_SECONDS)
+    except httpx.HTTPError:
+        logger.warning("alert webhook delivery failed", exc_info=True)
