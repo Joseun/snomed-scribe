@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -5,8 +7,10 @@ from app import models, schemas
 from app.db import get_db
 from app.extraction import AnthropicExtractionClient, ExtractionClient, extract_candidates
 from app.extraction_config import get_or_create_extraction_config
+from app.telemetry import extraction_latency_seconds, get_tracer, suggestion_confidence, suggestions_created_total
 
 router = APIRouter(prefix="/notes", tags=["notes"])
+tracer = get_tracer()
 
 
 def get_extraction_client(db: Session = Depends(get_db)) -> ExtractionClient:
@@ -20,27 +24,38 @@ def create_note(
     db: Session = Depends(get_db),
     extraction_client: ExtractionClient = Depends(get_extraction_client),
 ):
-    note = models.ConsultationNote(
-        patient_ref=note_in.patient_ref,
-        clinician_id=note_in.clinician_id,
-        raw_text=note_in.raw_text,
-    )
-    db.add(note)
-    db.commit()
-    db.refresh(note)
-
-    candidates = extract_candidates(note.raw_text, extraction_client)
-    for candidate in candidates:
-        db.add(
-            models.SuggestedCode(
-                note_id=note.id,
-                snomed_code=candidate.snomed_code,
-                term=candidate.term,
-                confidence=candidate.confidence,
-                source_span=candidate.source_span,
-            )
+    with tracer.start_as_current_span("note.submitted"):
+        note = models.ConsultationNote(
+            patient_ref=note_in.patient_ref,
+            clinician_id=note_in.clinician_id,
+            raw_text=note_in.raw_text,
         )
-    db.commit()
+        db.add(note)
+        db.commit()
+        db.refresh(note)
+
+    with tracer.start_as_current_span("extraction.call") as span:
+        start = time.perf_counter()
+        candidates = extract_candidates(note.raw_text, extraction_client)
+        extraction_latency_seconds.observe(time.perf_counter() - start)
+        span.set_attribute("candidate_count", len(candidates))
+
+    with tracer.start_as_current_span("suggestions.returned") as span:
+        for candidate in candidates:
+            db.add(
+                models.SuggestedCode(
+                    note_id=note.id,
+                    snomed_code=candidate.snomed_code,
+                    term=candidate.term,
+                    confidence=candidate.confidence,
+                    source_span=candidate.source_span,
+                )
+            )
+            suggestions_created_total.inc()
+            suggestion_confidence.observe(candidate.confidence)
+        db.commit()
+        span.set_attribute("suggestion_count", len(candidates))
+
     return note
 
 

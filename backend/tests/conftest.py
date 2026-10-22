@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("OTEL_SDK_DISABLED", "true")  # no collector in test runs
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
