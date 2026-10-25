@@ -21,6 +21,17 @@ record without that sign-off.
 and never saves a code without clinician approval. It is a coding aid, not a
 clinical decision tool.
 
+## Status
+
+Core loop works end to end, verified live: a note goes in, candidate SNOMED
+codes come back — including a live-scan preview that annotates codes inline
+as the clinician types — and nothing reaches the record without an explicit
+accept. Full stack (frontend, backend, Postgres, CI, local observability
+with traces/metrics/dashboards, alerting, and a working on-call agent) runs
+from a single `docker compose up`. See [docs/PROCESS.md](docs/PROCESS.md)
+for how the pieces fit together and the GitHub Issues tracker for what's
+built and tested.
+
 ## System at a glance
 
 1. Clinician pastes/types a consultation note into the web UI.
@@ -49,86 +60,47 @@ free-tier `GROQ_API_KEY` switches to Groq's OpenAI-compatible API instead —
 an explicit local-only workaround, not the documented stack (see
 [docs/SPEC.md](docs/SPEC.md)).
 
-## Status
-
-Core loop works end to end: a note goes in, candidate codes come back
-(including a live-scan preview while typing), and nothing reaches the
-record without an explicit accept. Backend, frontend, CI, local
-observability (traces, metrics, dashboards), alerting, and a basic on-call
-agent are all in place — see [docs/PROCESS.md](docs/PROCESS.md) for how
-these pieces fit together and the task tracker (GitHub Issues) for what's
-tracked and done.
-
-What's genuinely in place vs. what's scaffolding for a course project is
-important to be honest about — see Limitations below before relying on any
-of this beyond a demo.
-
 ## Limitations
 
-- **Curated SNOMED subset is small and only International-Edition
-  verified.** 15 concepts against the ~100-200 the spec describes. Every
-  code has been checked against SNOMED CT International via a public
-  terminology server, which already caught two real errors (a wrong
-  concept and a retired code) — but that's not NHS TRUD UK-release
-  verification, and the UK extension can differ from International in
-  places. A phrase outside the subset reports "no code" rather than a
-  possibly-wrong one; a phrase with a plausible-looking code in it is not
-  automatically trustworthy without that fuller verification pass.
-- **Negation handling is a heuristic, not real NLP.** Clause-boundary
-  splitting plus a fixed cue-word list ("no", "denies", …) catches the
-  common cases well but will miss indirect negation, double negatives, and
-  hedged language ("can't rule out", "query asthma").
-- **The extraction model can hallucinate or drift.** The backend enforces
-  the one hard rule server-side (reject any code outside the curated
-  subset) regardless of what the model proposes, but confidence scores and
-  term matches are still the model's self-report, not independently
-  verified.
-- **No authentication, authorization, or multi-practice tenancy.**
-  `clinician_id` is a free-text field the client supplies; there's no login,
-  no per-practice data isolation, no audit of who's allowed to see what.
-  Fine for a single-practice demo, not for anything real.
-- **No real EHR integration.** Notes are typed into this app's own UI, not
-  pulled from or pushed to a GP clinical system. `patient_ref` is an opaque
-  demo identifier, not a real NHS number.
-- **Live-scan has a real cost per debounce tick.** Every pause while typing
-  is a real LLM call. Fine at demo scale; would need caching, rate
-  limiting, or a cheaper/local model before scaling up to many concurrent
-  clinicians.
-- **On-call agent's diagnosis is a single, simple heuristic.** "One SNOMED
-  code dominates rejections" vs. "diffuse rejections" is a reasonable first
-  cut, but it's one signal, not a real anomaly-detection model, and it's
-  never been exercised against a real incident.
-- **Observability stack is local-only and unauthenticated.** Grafana runs
-  with anonymous admin access, Prometheus and Tempo have no retention
-  policy tuning or access control — correct for local dev, wrong for
-  anything deployed.
-- **Single-instance Postgres, no backups, no HA.** Acceptable for synthetic
-  demo data; not a statement about how this would need to run for real
-  clinical use.
+Known gaps, scoped deliberately for a course project — not a statement
+about what this would take to run for real:
+
+- **Curated SNOMED subset is small (15 concepts vs. the ~100-200 target)
+  and verified against SNOMED CT International, not the licensed NHS TRUD
+  UK release.** Verification already caught two real errors (a wrong
+  concept, a retired code) in the original data — but the UK extension can
+  still differ from International in places. A phrase outside the subset
+  just reports "no code" rather than guessing.
+- **Negation handling is a clause-boundary heuristic, not clinical NLP** —
+  catches the common cases ("no chest pain") but will miss hedged or
+  indirect phrasing ("can't rule out", "query asthma").
+- **No auth, multi-practice tenancy, or EHR integration** — single-practice
+  demo scope, `clinician_id`/`patient_ref` are client-supplied demo
+  identifiers, not real login or NHS numbers.
+- **Several pieces are demo-grade by design**: live-scan calls the LLM on
+  every typing pause with no caching; the on-call agent's diagnosis is one
+  fixed heuristic, not a statistical model; the observability stack has no
+  auth or retention tuning; Postgres is single-instance with no backups.
 
 ## Ways to improve
 
-- Verify the full curated subset against NHS TRUD's licensed UK SNOMED CT
-  release and extend it toward the ~100-200 concept target in
-  [docs/SPEC.md](docs/SPEC.md), covering more of the presentations a UK GP
-  actually codes day to day.
+- Verify the curated subset against NHS TRUD's licensed UK release and
+  extend it toward the ~100-200 concept target in
+  [docs/SPEC.md](docs/SPEC.md).
 - Replace the clause-heuristic negation detector with a proper clinical NLP
-  pass (or a second LLM-graded negation/certainty pass) to catch hedged and
-  indirect negation.
-- Add caching/rate-limiting to the live-scan preview endpoint — e.g. don't
-  re-call the model for a prefix of text already scanned, or debounce
-  further when a note is long and mostly stable.
-- Give the on-call agent a statistical basis (e.g. a real drift/anomaly
-  model over rejection patterns, confidence distributions over time)
-  instead of one fixed heuristic threshold, and actually exercise it
+  pass, or a second LLM-graded negation/certainty pass.
+- Cache/rate-limit the live-scan preview endpoint instead of calling the
+  model on every debounce tick.
+- Give the on-call agent a statistical basis (real drift/anomaly detection
+  over rejection patterns) instead of one fixed threshold, and exercise it
   against a seeded incident in a test.
-- Add authentication and per-practice data isolation if this were ever to
-  move beyond a single-practice demo.
-- Harden the observability stack for a real deployment: Grafana auth,
-  retention policies, alert routing beyond a single webhook.
-- Add browser-driven end-to-end tests (the UI has been verified manually
-  against a live backend this session, but there's no automated coverage
-  of the actual rendered page).
+- Add authentication and per-practice data isolation before any real use
+  beyond a single-practice demo.
+- Harden observability for a real deployment: Grafana auth, retention
+  policies, alert routing beyond a single webhook.
+- Add browser-driven end-to-end tests — the UI's been verified manually
+  against a live backend, but there's no automated coverage of the
+  rendered page itself.
 
 ## What this project reinforced
 
