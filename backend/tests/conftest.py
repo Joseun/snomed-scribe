@@ -48,6 +48,9 @@ class FakeExtractionClient:
     def complete(self, note_text, concepts):
         return self.raw_candidates
 
+    def complete_preview(self, note_text, concepts):
+        return self.raw_candidates
+
 
 @pytest.fixture()
 def fake_extraction_client():

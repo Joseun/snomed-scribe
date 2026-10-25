@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.db import get_db
-from app.extraction import AnthropicExtractionClient, ExtractionClient, extract_candidates
+from app.extraction import AnthropicExtractionClient, ExtractionClient, extract_candidates, extract_preview_candidates
 from app.extraction_config import get_or_create_extraction_config
 from app.telemetry import extraction_latency_seconds, get_tracer, suggestion_confidence, suggestions_created_total
 
@@ -75,6 +75,6 @@ def preview_note(
     accepted code directly.
     """
     with tracer.start_as_current_span("note.preview") as span:
-        candidates = extract_candidates(preview_in.raw_text, extraction_client)
+        candidates = extract_preview_candidates(preview_in.raw_text, extraction_client)
         span.set_attribute("candidate_count", len(candidates))
     return candidates

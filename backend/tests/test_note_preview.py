@@ -38,12 +38,28 @@ def test_preview_drops_negated_candidate(client, fake_extraction_client):
     assert resp.json() == []
 
 
-def test_preview_drops_out_of_subset_code(client, fake_extraction_client):
+def test_preview_shows_out_of_subset_candidate_with_no_code(client, fake_extraction_client):
     _override_extraction(
         fake_extraction_client,
-        [{"term": "Headache", "snomed_code": "99999999", "confidence": 0.7, "source_span": "headache"}],
+        [{"term": "Chest xray", "snomed_code": "99999999", "confidence": 0.7, "source_span": "chest xray"}],
     )
 
-    resp = client.post("/notes/preview", json={"raw_text": "Patient has a headache."})
+    resp = client.post("/notes/preview", json={"raw_text": "Sent for chest xray."})
     assert resp.status_code == 200
-    assert resp.json() == []
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["snomed_code"] is None
+    assert body[0]["term"] == "Chest xray"
+
+
+def test_preview_shows_null_code_candidate_as_no_code(client, fake_extraction_client):
+    _override_extraction(
+        fake_extraction_client,
+        [{"term": "Losing weight", "snomed_code": None, "confidence": 0.6, "source_span": "losing weight"}],
+    )
+
+    resp = client.post("/notes/preview", json={"raw_text": "He is losing weight."})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["snomed_code"] is None
