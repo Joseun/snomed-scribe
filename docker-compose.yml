@@ -11,7 +11,9 @@ services:
       - db_data:/var/lib/postgresql/data
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       DATABASE_URL: postgresql+psycopg2://clincode:clincode@db:5432/clincode
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
