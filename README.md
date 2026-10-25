@@ -1,4 +1,4 @@
-# ClinCode — Free-Text to SNOMED CT Coding Assistant
+# SNOMED-Scribe — Free-Text to SNOMED CT Coding Assistant
 
 ## Problem
 
@@ -8,7 +8,7 @@ SOB on exertion, likely COPD exacerbation"). Translating that narrative into
 correct SNOMED CT codes is manual, slow, and error-prone — clinicians either
 search a terminology browser term-by-term or under-code.
 
-ClinCode reads a clinician's free-text consultation note and suggests
+SNOMED-Scribe reads a clinician's free-text consultation note and suggests
 candidate SNOMED CT codes for each clinically relevant concept it finds,
 including handling negation ("no chest pain") and common abbreviations. The
 clinician reviews every suggestion in a validation screen and explicitly
@@ -17,7 +17,7 @@ record without that sign-off.
 
 **Who uses it:** GP practice clinicians, during or after a consultation.
 
-**What it is not:** ClinCode does not diagnose, does not recommend treatment,
+**What it is not:** SNOMED-Scribe does not diagnose, does not recommend treatment,
 and never saves a code without clinician approval. It is a coding aid, not a
 clinical decision tool.
 
