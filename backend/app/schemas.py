@@ -10,6 +10,20 @@ class NoteCreate(BaseModel):
     raw_text: str
 
 
+class NotePreviewRequest(BaseModel):
+    raw_text: str
+
+
+class NotePreviewSuggestion(BaseModel):
+    snomed_code: str
+    term: str
+    confidence: float
+    source_span: str
+
+    class Config:
+        from_attributes = True
+
+
 class NoteOut(BaseModel):
     id: str
     patient_ref: str
