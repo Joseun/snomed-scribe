@@ -1,9 +1,73 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { createNote, getSuggestions, decideSuggestion, previewExtraction, PreviewSuggestion, Suggestion } from "./api";
 
 const CLINICIAN_ID = "gp1";
 const PREVIEW_DEBOUNCE_MS = 900;
 const PREVIEW_MIN_LENGTH = 20;
+
+interface Match {
+  start: number;
+  end: number;
+  suggestion: PreviewSuggestion;
+}
+
+interface AnnotatedResult {
+  nodes: ReactNode[];
+  unmatched: PreviewSuggestion[];
+}
+
+/** Finds each suggestion's source_span in noteText (case-insensitive) and
+ * builds render segments with "(code)" inserted right after each match,
+ * leaving everything else in the note untouched. A span the model drifted
+ * on (not found verbatim) isn't silently dropped — it's returned separately
+ * so the UI can still surface it. */
+function annotateNote(noteText: string, suggestions: PreviewSuggestion[]): AnnotatedResult {
+  const lower = noteText.toLowerCase();
+  const unmatched: PreviewSuggestion[] = [];
+  const matches: Match[] = [];
+
+  for (const s of suggestions) {
+    const span = s.source_span.toLowerCase();
+    const idx = span ? lower.indexOf(span) : -1;
+    if (idx === -1) {
+      unmatched.push(s);
+    } else {
+      matches.push({ start: idx, end: idx + span.length, suggestion: s });
+    }
+  }
+  matches.sort((a, b) => a.start - b.start);
+
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const m of matches) {
+    if (m.start < cursor) continue; // overlapping match, already consumed
+    if (m.start > cursor) nodes.push(noteText.slice(cursor, m.start));
+    nodes.push(
+      <span key={`${m.suggestion.snomed_code}-${m.start}`}>
+        {noteText.slice(m.start, m.end)}
+        <span
+          style={{
+            background: "#e8f4ff",
+            color: "#1a5fa3",
+            borderRadius: 3,
+            padding: "0 4px",
+            marginLeft: 2,
+            fontSize: 13,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          ({m.suggestion.snomed_code})
+        </span>
+      </span>
+    );
+    cursor = m.end;
+  }
+  if (cursor < noteText.length) nodes.push(noteText.slice(cursor));
+
+  return { nodes, unmatched };
+}
 
 export default function App() {
   const [patientRef, setPatientRef] = useState("");
@@ -152,15 +216,23 @@ export default function App() {
           {noteText.trim().length >= PREVIEW_MIN_LENGTH && livePreview.length === 0 && !previewLoading && (
             <p>No candidates found yet.</p>
           )}
-          <ul style={{ paddingLeft: 18 }}>
-            {livePreview.map((p, i) => (
-              <li key={`${p.snomed_code}-${i}`} style={{ marginBottom: 6 }}>
-                <strong>{p.term}</strong> ({p.snomed_code}) — {Math.round(p.confidence * 100)}%
-                <br />
-                <span style={{ fontSize: 12, color: "#888" }}>"{p.source_span}"</span>
-              </li>
-            ))}
-          </ul>
+          {(() => {
+            const { nodes, unmatched } = annotateNote(noteText, livePreview);
+            return (
+              <>
+                <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{nodes}</p>
+                {unmatched.length > 0 && (
+                  <ul style={{ paddingLeft: 18, fontSize: 13, color: "#888" }}>
+                    {unmatched.map((p, i) => (
+                      <li key={`${p.snomed_code}-${i}`}>
+                        {p.term} ({p.snomed_code}) — couldn't place "{p.source_span}" in the note text
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>
