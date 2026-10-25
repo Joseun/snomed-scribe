@@ -15,7 +15,7 @@ class NotePreviewRequest(BaseModel):
 
 
 class NotePreviewSuggestion(BaseModel):
-    snomed_code: str
+    snomed_code: Optional[str] = None
     term: str
     confidence: float
     source_span: str

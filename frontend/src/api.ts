@@ -26,7 +26,7 @@ export async function getSuggestions(noteId: string): Promise<Suggestion[]> {
 }
 
 export interface PreviewSuggestion {
-  snomed_code: string;
+  snomed_code: string | null;
   term: string;
   confidence: number;
   source_span: string;

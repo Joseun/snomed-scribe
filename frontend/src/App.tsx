@@ -43,13 +43,14 @@ function annotateNote(noteText: string, suggestions: PreviewSuggestion[]): Annot
   for (const m of matches) {
     if (m.start < cursor) continue; // overlapping match, already consumed
     if (m.start > cursor) nodes.push(noteText.slice(cursor, m.start));
+    const hasCode = m.suggestion.snomed_code != null;
     nodes.push(
-      <span key={`${m.suggestion.snomed_code}-${m.start}`}>
+      <span key={`${m.suggestion.snomed_code ?? "nocode"}-${m.start}`}>
         {noteText.slice(m.start, m.end)}
         <span
           style={{
-            background: "#e8f4ff",
-            color: "#1a5fa3",
+            background: hasCode ? "#e8f4ff" : "#f0f0f0",
+            color: hasCode ? "#1a5fa3" : "#888",
             borderRadius: 3,
             padding: "0 4px",
             marginLeft: 2,
@@ -58,7 +59,7 @@ function annotateNote(noteText: string, suggestions: PreviewSuggestion[]): Annot
             whiteSpace: "nowrap",
           }}
         >
-          ({m.suggestion.snomed_code})
+          {hasCode ? `(${m.suggestion.snomed_code})` : "(no code)"}
         </span>
       </span>
     );
@@ -109,7 +110,9 @@ export default function App() {
     const note = await createNote(patientRef, CLINICIAN_ID, noteText);
     setNoteId(note.id);
     setSuggestions(await getSuggestions(note.id));
-    setLivePreview([]);
+    // Live-scan panel intentionally keeps showing its annotation — the
+    // codes becoming real suggestions below shouldn't make them vanish
+    // from the still-accurate live view of the note text.
   }
 
   async function decide(id: string, action: "accept" | "reject") {
@@ -224,8 +227,9 @@ export default function App() {
                 {unmatched.length > 0 && (
                   <ul style={{ paddingLeft: 18, fontSize: 13, color: "#888" }}>
                     {unmatched.map((p, i) => (
-                      <li key={`${p.snomed_code}-${i}`}>
-                        {p.term} ({p.snomed_code}) — couldn't place "{p.source_span}" in the note text
+                      <li key={`${p.snomed_code ?? "nocode"}-${i}`}>
+                        {p.term} {p.snomed_code ? `(${p.snomed_code})` : "(no code)"} — couldn't place "
+                        {p.source_span}" in the note text
                       </li>
                     ))}
                   </ul>
