@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.config import EXTRACTION_PROVIDER
 from app.db import get_db
-from app.extraction import AnthropicExtractionClient, ExtractionClient, extract_candidates
+from app.extraction import AnthropicExtractionClient, ExtractionClient, GroqExtractionClient, extract_candidates
 from app.extraction_config import get_or_create_extraction_config
 from app.telemetry import extraction_latency_seconds, get_tracer, suggestion_confidence, suggestions_created_total
 
@@ -14,6 +15,8 @@ tracer = get_tracer()
 
 
 def get_extraction_client(db: Session = Depends(get_db)) -> ExtractionClient:
+    if EXTRACTION_PROVIDER == "groq":
+        return GroqExtractionClient()  # local-only workaround, see app/config.py
     config = get_or_create_extraction_config(db)
     return AnthropicExtractionClient(model=config.active_model)
 

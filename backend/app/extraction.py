@@ -14,7 +14,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from app.config import ANTHROPIC_API_KEY, KNOWN_GOOD_EXTRACTION_MODEL, SNOMED_SUBSET_PATH
+from app.config import (
+    ANTHROPIC_API_KEY,
+    GROQ_API_KEY,
+    GROQ_MODEL,
+    KNOWN_GOOD_EXTRACTION_MODEL,
+    SNOMED_SUBSET_PATH,
+)
 
 NEGATION_CUES = ("no ", "not ", "denies ", "denied ", "without ", "no evidence of ")
 CLAUSE_BOUNDARY = re.compile(r"[.,;]|\bbut\b|\bhowever\b|\balthough\b")
@@ -70,6 +76,31 @@ class ExtractionClient(Protocol):
         """Return raw candidates: [{term, snomed_code, confidence, source_span}, ...]."""
 
 
+def _build_prompt(note_text: str, concepts: list[SnomedConcept]) -> str:
+    concept_list = "\n".join(f"{c.code} | {c.term} | synonyms: {', '.join(c.synonyms)}" for c in concepts)
+    return (
+        "You are assisting a UK GP with clinical coding. Given the consultation "
+        "note below and the allowed SNOMED CT concept list, return a JSON array "
+        "of candidate concepts actually present in the note (not negated, not "
+        "merely mentioned hypothetically). Only use codes from the allowed list.\n\n"
+        f"Allowed concepts:\n{concept_list}\n\n"
+        f"Note:\n{note_text}\n\n"
+        "Respond with only a JSON array of objects, no other text: "
+        '{"term": ..., "snomed_code": ..., "confidence": 0-1, "source_span": "<exact text from note>"}'
+    )
+
+
+def _parse_json_array(text: str) -> list[dict]:
+    """Strip markdown code fences some models wrap JSON in before parsing."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.strip("`")
+        if stripped.startswith("json"):
+            stripped = stripped[len("json") :]
+        stripped = stripped.strip()
+    return json.loads(stripped)
+
+
 class AnthropicExtractionClient:
     """Calls Claude, constrained to the curated SNOMED subset via the prompt."""
 
@@ -81,24 +112,46 @@ class AnthropicExtractionClient:
         import anthropic
 
         client = anthropic.Anthropic(api_key=self.api_key)
-        concept_list = "\n".join(f"{c.code} | {c.term} | synonyms: {', '.join(c.synonyms)}" for c in concepts)
-        prompt = (
-            "You are assisting a UK GP with clinical coding. Given the consultation "
-            "note below and the allowed SNOMED CT concept list, return a JSON array "
-            "of candidate concepts actually present in the note (not negated, not "
-            "merely mentioned hypothetically). Only use codes from the allowed list.\n\n"
-            f"Allowed concepts:\n{concept_list}\n\n"
-            f"Note:\n{note_text}\n\n"
-            "Respond with only a JSON array of objects: "
-            '{"term": ..., "snomed_code": ..., "confidence": 0-1, "source_span": "<exact text from note>"}'
-        )
+        prompt = _build_prompt(note_text, concepts)
         response = client.messages.create(
             model=self.model,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
         text = response.content[0].text
-        return json.loads(text)
+        return _parse_json_array(text)
+
+
+class GroqExtractionClient:
+    """Calls Groq's OpenAI-compatible chat API.
+
+    Local-only workaround (see app/config.py's EXTRACTION_PROVIDER) — not the
+    documented stack in docs/SPEC.md, which names Claude/Anthropic.
+    """
+
+    API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+    def __init__(self, model: str = GROQ_MODEL, api_key: str | None = None):
+        self.model = model
+        self.api_key = api_key or GROQ_API_KEY
+
+    def complete(self, note_text: str, concepts: list[SnomedConcept]) -> list[dict]:
+        import httpx
+
+        prompt = _build_prompt(note_text, concepts)
+        response = httpx.post(
+            self.API_URL,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={
+                "model": self.model,
+                "temperature": 0,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        text = response.json()["choices"][0]["message"]["content"]
+        return _parse_json_array(text)
 
 
 def extract_candidates(

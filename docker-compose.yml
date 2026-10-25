@@ -21,7 +21,9 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       DATABASE_URL: postgresql+psycopg2://clincode:clincode@db:5432/clincode
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      EXTRACTION_PROVIDER: ${EXTRACTION_PROVIDER:-anthropic}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
