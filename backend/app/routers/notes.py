@@ -62,3 +62,19 @@ def create_note(
 @router.get("/{note_id}/suggestions", response_model=list[schemas.SuggestionOut])
 def list_suggestions(note_id: str, db: Session = Depends(get_db)):
     return db.query(models.SuggestedCode).filter(models.SuggestedCode.note_id == note_id).all()
+
+
+@router.post("/preview", response_model=list[schemas.NotePreviewSuggestion])
+def preview_note(
+    preview_in: schemas.NotePreviewRequest,
+    extraction_client: ExtractionClient = Depends(get_extraction_client),
+):
+    """Live-scan while a clinician types. Writes nothing — no note, no
+    suggested_code row — so the hard invariant (no code reaches the record
+    without an explicit accept) holds trivially: nothing here can become an
+    accepted code directly.
+    """
+    with tracer.start_as_current_span("note.preview") as span:
+        candidates = extract_candidates(preview_in.raw_text, extraction_client)
+        span.set_attribute("candidate_count", len(candidates))
+    return candidates
